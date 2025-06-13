@@ -1,0 +1,16 @@
+{
+    "name": "tag-sync",
+    "version": "0.1.0",
+    "bin": {
+        "main": "src/main.ts"
+    },
+    "devDependencies": {
+        "@types/node": "^24.0.1",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.8.3"
+    },
+    "dependencies": {
+        "@aws-sdk/client-ec2": "^3.828.0",
+        "@aws-sdk/client-ssm": "^3.828.0"
+    }
+}
