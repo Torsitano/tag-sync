@@ -1,0 +1,5 @@
+Identifier,Tag: Name,Service,Type,Region,Tag: AllocationCode,Tag: Description,Tag: OrgCode,Tag: Owner,Tag: Practice,Tag: Sector,Tags,ARN
+i-074a10186ddea9ba1,instance-1,EC2,Instance,us-east-1,(not tagged),(not tagged),2,(not tagged),(not tagged),(not tagged),2,arn:aws:ec2:us-east-1:698852667105:instance/i-074a10186ddea9ba1
+i-0544fa05dff5a1555,instance-2,EC2,Instance,us-east-1,(not tagged),(not tagged),(not tagged),(not tagged),(not tagged),(not tagged),1,arn:aws:ec2:us-east-1:698852667105:instance/i-0544fa05dff5a1555
+i-025e26fed30acab00,instance-3,EC2,Instance,us-east-1,(not tagged),(not tagged),(not tagged),(not tagged),(not tagged),(not tagged),1,arn:aws:ec2:us-east-1:698852667105:instance/i-025e26fed30acab00
+i-060ece5d303643626,instance-4,EC2,Instance,us-east-1,123,test,345,me,doctor,public,7,arn:aws:ec2:us-east-1:698852667105:instance/i-060ece5d303643626

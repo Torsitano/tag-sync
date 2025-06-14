@@ -1,0 +1,21 @@
+{
+  "i-074a10186ddea9ba1": {
+    "Name": "instance-1",
+    "OrgCode": "2"
+  },
+  "i-0544fa05dff5a1555": {
+    "Name": "instance-2"
+  },
+  "i-025e26fed30acab00": {
+    "Name": "instance-3"
+  },
+  "i-060ece5d303643626": {
+    "Description": "test",
+    "Practice": "doctor",
+    "OrgCode": "345",
+    "AllocationCode": "123",
+    "Owner": "me",
+    "Name": "instance-4",
+    "Sector": "public"
+  }
+}
