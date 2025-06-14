@@ -82,7 +82,6 @@ npx ts-node src/main.ts test-csv-parse <csv-file-path>
 Performs a full synchronization:
 - Backs up all instance tags before any changes
 - Syncs tags from CSV to instances (removes/adds/updates tags as specified in the CSV)
-- Applies default tags to instances (adds any default tags missing from the CSV)
 - Syncs instance tags to attached volumes
 - Syncs volume tags to snapshots
 
@@ -90,7 +89,8 @@ Performs a full synchronization:
 npx ts-node src/main.ts full-sync
 ```
 **Note:**
-- The full sync applies default tags *after* the CSV sync. This means any tags missing from the CSV will be added from the default set in SSM.
+- The `full-sync` command does **not** apply default tags from SSM by default. If you want to apply default tags, run `npx ts-node src/main.ts apply-default-tags` separately before or after full sync.
+- The recommended workflow is to use the CSV as your source of truth for tags, and only apply default tags if you want to fill in missing tags not present in the CSV.
 - It is recommended to set `OVERWRITE_TAGS_ON_INSTANCE_FROM_DEFAULT = false` (the default) in `src/main.ts` so that default tags do **not** overwrite values set in the CSV. This ensures the CSV is the source of truth for any tag it specifies, and default tags only fill in missing values.
 
 This is the recommended way to ensure all resources are tagged consistently in one step.

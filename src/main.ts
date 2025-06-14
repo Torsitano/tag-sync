@@ -68,10 +68,9 @@ async function handleSyncToSnapshots( ec2Client: EC2Client ) {
     await applyVolumeTagsToSnapshots( ec2Client, volumes, snapshots, DRY_RUN_SNAPSHOTS )
 }
 
-async function handleFullSync( ec2Client: EC2Client, ssmClient: SSMClient ) {
+async function handleFullSync( ec2Client: EC2Client ) {
     await handleBackupTags( ec2Client )
     await handleSyncFromCsv( ec2Client, true )
-    await handleApplyDefaultTags( ec2Client, ssmClient, true )
     await handleSyncToVolumes( ec2Client )
     await handleSyncToSnapshots( ec2Client )
 }
@@ -109,7 +108,7 @@ async function cliEntrypoint() {
             break
         case 'full-sync':
             console.log( 'Full sync' )
-            await handleFullSync( ec2Client, ssmClient )
+            await handleFullSync( ec2Client )
             break
         default:
             console.log( 'Usage: ts-node src/main.ts <backup-tags|apply-default-tags|sync-to-volumes|restore-backup|test-csv-parse|sync-from-csv|sync-to-snapshots|full-sync>' )
