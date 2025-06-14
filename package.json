@@ -1,0 +1,19 @@
+{
+    "name": "tag-sync",
+    "version": "0.1.0",
+    "bin": {
+        "main": "src/main.ts"
+    },
+    "devDependencies": {
+        "@types/csv-parse": "^1.1.12",
+        "@types/node": "^24.0.1",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.8.3"
+    },
+    "dependencies": {
+        "@aws-sdk/client-ec2": "^3.828.0",
+        "@aws-sdk/client-ssm": "^3.828.0",
+        "csv-parse": "^5.6.0",
+        "inquirer": "^12.6.3"
+    }
+}
