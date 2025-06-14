@@ -1,80 +1,43 @@
-import { EC2Client, Instance, paginateDescribeInstances, paginateDescribeVolumes, Volume } from '@aws-sdk/client-ec2'
-import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm'
-import { applyDefaultTagsToInstances, backupInstanceTags } from './instances'
+import { EC2Client } from '@aws-sdk/client-ec2'
+import { SSMClient } from '@aws-sdk/client-ssm'
+import { applyDefaultTagsToInstances, backupInstanceTags, syncTagsFromCsv } from './instances'
 import { applyInstanceTagsToVolumes } from './volumes'
 import { restoreInstanceTagsFromBackup } from './restoreBackup'
-import { parseTagCsv } from './instances'
+import { getTagsFromSssm, listEc2Instances, listSnapshots, listVolumes } from './tagUtils'
+import { applyVolumeTagsToSnapshots } from './snapshots'
 
+// Use if you want to get the default tags from SSM Parameter Store
 export const PARAMETER_NAME = '/tag-sync/tags'
+// Will overwrite tags on a volume if the volume has tags that conflict with the instance tags
 export const OVERWRITE_TAGS_ON_VOLUME_FROM_INSTANCE = true
+// Will overwrite tags on an Instance from the default tags from SSM
 export const OVERWRITE_TAGS_ON_INSTANCE_FROM_DEFAULT = false
+// Will apply default tags to instances
 export const APPLY_DEFAULT_TAGS_TO_INSTANCES = true
-export const DRY_RUN_INSTANCES = true
-export const DRY_RUN_VOLUMES = true
-
-// Retrieves a JSON blob from SSM Parameter Store to use as default tags
-export async function getTagsFromSssm( ssmClient: SSMClient ): Promise<Map<string, string>> {
-    const command = new GetParameterCommand( {
-        Name: PARAMETER_NAME,
-    } )
-
-    const response = await ssmClient.send( command )
-
-    if ( !response.Parameter || !response.Parameter.Value ) {
-        throw new Error( `Parameter ${PARAMETER_NAME} not found or has no value` )
-    }
-
-    const parsedTags: Record<string, string> = JSON.parse( response.Parameter.Value )
-    return new Map( Object.entries( parsedTags ) )
-}
-
-export async function listEc2Instances( ec2Client: EC2Client ): Promise<Instance[]> {
-    const paginator = paginateDescribeInstances( { client: ec2Client }, {} )
-    const instances: Instance[] = []
-    for await ( const page of paginator ) {
-        const reservations = page.Reservations!
-
-        for ( const reservation of reservations ) {
-            instances.push( ...reservation.Instances! )
-        }
-    }
-
-    return instances
-
-}
-
-// Lists all EC2 volumes in the account and returns them as a Map with the Volume ID as the key
-export async function listVolumes( ec2Client: EC2Client ): Promise<Map<string, Volume>> {
-    const paginator = paginateDescribeVolumes( { client: ec2Client }, {} )
-
-    const volumeMap = new Map<string, Volume>()
-
-    for await ( const page of paginator ) {
-        const volumeList = page.Volumes!
-
-        for ( const volume of volumeList ) {
-            volumeMap.set( volume.VolumeId!, volume )
-        }
-    }
-    return volumeMap
-}
+// Will delete tags from an instance if they are not in the CSV file
+export const DELETE_TAGS_FROM_INSTANCES = true
+// Will dry run the operations
+export const DRY_RUN_INSTANCES = false
+export const DRY_RUN_VOLUMES = false
+export const DRY_RUN_SNAPSHOTS = false
 
 async function handleBackupTags( ec2Client: EC2Client ) {
     const instances = await listEc2Instances( ec2Client )
     backupInstanceTags( instances )
 }
 
-async function handleApplyDefaultTags( ec2Client: EC2Client, ssmClient: SSMClient ) {
+async function handleApplyDefaultTags( ec2Client: EC2Client, ssmClient: SSMClient, skipBackup = false ) {
     const defaultTags = await getTagsFromSssm( ssmClient )
     const instances = await listEc2Instances( ec2Client )
-    await applyDefaultTagsToInstances( ec2Client, instances, defaultTags )
+    if ( !skipBackup ) await handleBackupTags( ec2Client )
+    await applyDefaultTagsToInstances( ec2Client, instances, defaultTags, DRY_RUN_INSTANCES )
 }
 
 async function handleSyncToVolumes( ec2Client: EC2Client ) {
     const instances = await listEc2Instances( ec2Client )
     const volumes = await listVolumes( ec2Client )
     for ( const instance of instances ) {
-        await applyInstanceTagsToVolumes( ec2Client, instance, volumes )
+        await applyInstanceTagsToVolumes( ec2Client, instance, volumes, DRY_RUN_VOLUMES )
     }
 }
 
@@ -88,16 +51,29 @@ async function handleRestoreBackup( ec2Client: EC2Client ) {
     await restoreInstanceTagsFromBackup( ec2Client, backupFileName )
 }
 
-async function handleTestCsvParse() {
-    // Get the CSV file to parse from the command listEc2Instances
+async function handleSyncFromCsv( ec2Client: EC2Client, skipBackup = false ) {
     const csvFilePath = process.argv[ 3 ]
     if ( !csvFilePath ) {
-        console.error( 'Usage: ts-node src/main.ts test-csv-parse <csv-file-path>' )
+        console.error( 'Usage: ts-node src/main.ts sync-from-csv <csv-file-path>' )
         process.exit( 1 )
     }
+    if ( !skipBackup ) await handleBackupTags( ec2Client )
+    const instances = await listEc2Instances( ec2Client )
+    await syncTagsFromCsv( ec2Client, instances, csvFilePath, DRY_RUN_INSTANCES )
+}
 
-    const parsedRecords = parseTagCsv( csvFilePath )
-    console.log( parsedRecords )
+async function handleSyncToSnapshots( ec2Client: EC2Client ) {
+    const volumes = await listVolumes( ec2Client )
+    const snapshots = await listSnapshots( ec2Client )
+    await applyVolumeTagsToSnapshots( ec2Client, volumes, snapshots, DRY_RUN_SNAPSHOTS )
+}
+
+async function handleFullSync( ec2Client: EC2Client, ssmClient: SSMClient ) {
+    await handleBackupTags( ec2Client )
+    await handleSyncFromCsv( ec2Client, true )
+    await handleApplyDefaultTags( ec2Client, ssmClient, true )
+    await handleSyncToVolumes( ec2Client )
+    await handleSyncToSnapshots( ec2Client )
 }
 
 async function cliEntrypoint() {
@@ -108,23 +84,35 @@ async function cliEntrypoint() {
 
     switch ( cmd ) {
         case 'backup-tags':
+            console.log( 'Backing up tags to file' )
             await handleBackupTags( ec2Client )
             break
         case 'apply-default-tags':
+            console.log( 'Applying default tags to instances' )
             await handleApplyDefaultTags( ec2Client, ssmClient )
             break
         case 'sync-to-volumes':
+            console.log( 'Syncing tags to volumes' )
             await handleSyncToVolumes( ec2Client )
             break
         case 'restore-backup':
+            console.log( 'Restoring tags from backup file' )
             await handleRestoreBackup( ec2Client )
             break
-        // test parse a CSV file and print the results
-        case 'test-csv-parse':
-            await handleTestCsvParse()
+        case 'sync-from-csv':
+            console.log( 'Syncing tags from CSV file' )
+            await handleSyncFromCsv( ec2Client )
+            break
+        case 'sync-to-snapshots':
+            console.log( 'Syncing tags to snapshots' )
+            await handleSyncToSnapshots( ec2Client )
+            break
+        case 'full-sync':
+            console.log( 'Full sync' )
+            await handleFullSync( ec2Client, ssmClient )
             break
         default:
-            console.log( 'Usage: ts-node src/main.ts <backup-tags|apply-default-tags|sync-to-volumes|restore-backup>' )
+            console.log( 'Usage: ts-node src/main.ts <backup-tags|apply-default-tags|sync-to-volumes|restore-backup|test-csv-parse|sync-from-csv|sync-to-snapshots|full-sync>' )
     }
 }
 

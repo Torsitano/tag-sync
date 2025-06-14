@@ -1,8 +1,9 @@
 import { EC2Client, Instance, Tag } from '@aws-sdk/client-ec2'
-import { DRY_RUN_INSTANCES, OVERWRITE_TAGS_ON_INSTANCE_FROM_DEFAULT } from './main'
-import { applyTagsToResources } from './tagUtils'
+import { DELETE_TAGS_FROM_INSTANCES, OVERWRITE_TAGS_ON_INSTANCE_FROM_DEFAULT } from './main'
+import { applyTagsToResources, deleteTagsFromResources } from './tagUtils'
 import * as fs from 'fs'
 import { parse } from 'csv-parse/sync'
+import inquirer from 'inquirer'
 
 interface ParsedRecord {
     Identifier: string
@@ -14,42 +15,30 @@ interface ParsedRecord {
 }
 
 // Applies default tags from SSM to the instances
-export async function applyDefaultTagsToInstances( ec2Client: EC2Client, instances: Instance[], defaultTags: Map<string, string> ) {
+export async function applyDefaultTagsToInstances( ec2Client: EC2Client, instances: Instance[], defaultTags: Map<string, string>, isDryRun: boolean ) {
     for ( const instance of instances ) {
-
         const tagsToApply: Tag[] = []
-
         for ( const [ key, value ] of defaultTags.entries() ) {
-
             const existingTag = instance.Tags?.find( tag => tag.Key === key )
-
-
             if ( !existingTag ) {
-                // If the tag is not on the instance, we add it to the tags to apply
                 console.log( `Adding default tag '${key}' with value '${value}' to instance '${instance.InstanceId}'` )
                 tagsToApply.push( {
                     Key: key,
                     Value: value
                 } )
             } else if ( OVERWRITE_TAGS_ON_INSTANCE_FROM_DEFAULT && existingTag.Value !== value ) {
-                // If the tag is on the instance but has a different value, we overwrite it if overwrite is true
                 console.log( `Overwriting default tag '${key}' with value '${value}' on instance '${instance.InstanceId}'` )
                 tagsToApply.push( {
                     Key: key,
                     Value: value
                 } )
-            } else {
-                // If the tag is on the instance and has the same value or we are not overwriting, we skip it
-                console.log( `Skipping default tag '${key}' on instance '${instance.InstanceId}' because it already exists with the same value or we are not overwriting` )
             }
         }
-
-
         await applyTagsToResources( {
             ec2Client,
             resourceIds: [ instance.InstanceId! ],
             tags: tagsToApply,
-            isDryRun: DRY_RUN_INSTANCES,
+            isDryRun: isDryRun,
             resourceType: 'instance',
             resourceName: instance.InstanceId!
         } )
@@ -80,23 +69,67 @@ export function backupInstanceTags( instances: Instance[] ) {
 }
 
 // Applies tags from a CSV file to the instances in the CSV file
-export async function applyTagsFromCsv( ec2Client: EC2Client, csvFilePath: string ) {
+export async function syncTagsFromCsv( ec2Client: EC2Client, instances: Instance[], csvFilePath: string, isDryRun: boolean ) {
     const parsedRecords = parseTagCsv( csvFilePath )
-
-    for ( const record of parsedRecords ) {
-        const tags: Tag[] = []
-
-        for ( const [ key, value ] of Object.entries( record.Tags ) ) {
-            tags.push( { Key: key, Value: value } )
+    if ( DELETE_TAGS_FROM_INSTANCES ) {
+        const deleteTagsFromInstancesConfirmation = await inquirer.prompt( [ {
+            type: 'confirm',
+            name: 'deleteTagsFromInstances',
+            message: 'Are you sure you want to delete tags that are not in the CSV file from Instances?'
+        } ] )
+        if ( deleteTagsFromInstancesConfirmation.deleteTagsFromInstances ) {
+            await deleteTagsFromInstances( ec2Client, instances, parsedRecords, isDryRun )
+        } else {
+            console.log( 'Tags will not be deleted from instances' )
         }
+    }
+    await applyTagsFromCsv( ec2Client, instances, parsedRecords, isDryRun )
+}
 
-        await applyTagsToResources( {
+// Applies tags from a CSV file to the instances in the CSV file
+export async function applyTagsFromCsv( ec2Client: EC2Client, instances: Instance[], parsedRecords: ParsedRecord[], isDryRun: boolean ) {
+    for ( const record of parsedRecords ) {
+        const tagsToApply: Tag[] = []
+        const instance = instances.find( i => i.InstanceId === record.Identifier )
+        for ( const [ key, value ] of Object.entries( record.Tags ) ) {
+            const existingTag = instance?.Tags?.find( tag => tag.Key === key )
+            if ( !existingTag || existingTag.Value !== value ) {
+                tagsToApply.push( { Key: key, Value: value } )
+            }
+        }
+        if ( tagsToApply.length > 0 ) {
+            await applyTagsToResources( {
+                ec2Client,
+                resourceIds: [ record.Identifier ],
+                tags: tagsToApply,
+                isDryRun: isDryRun,
+                resourceType: 'instance',
+                resourceName: record.Identifier
+            } )
+        }
+    }
+}
+
+// Function that will delete tags from an instance if they are not in the CSV file
+export async function deleteTagsFromInstances( ec2Client: EC2Client, instances: Instance[], parsedRecords: ParsedRecord[], isDryRun: boolean ) {
+    const protectedKeys = [ 'Name' ] // Add more keys if needed
+    for ( const instance of instances ) {
+        const tagsToDelete: Tag[] = []
+        const record = parsedRecords.find( r => r.Identifier === instance.InstanceId )
+        const csvTagKeys = record ? Object.keys( record.Tags ) : []
+        for ( const tag of instance.Tags || [] ) {
+            if ( protectedKeys.includes( tag.Key! ) ) continue
+            if ( !csvTagKeys.includes( tag.Key! ) ) {
+                tagsToDelete.push( tag )
+            }
+        }
+        await deleteTagsFromResources( {
             ec2Client,
-            resourceIds: [ record.Identifier ],
-            tags: tags,
-            isDryRun: DRY_RUN_INSTANCES,
+            resourceIds: [ instance.InstanceId! ],
+            tags: tagsToDelete,
+            isDryRun: isDryRun,
             resourceType: 'instance',
-            resourceName: record.Identifier
+            resourceName: instance.InstanceId!
         } )
     }
 }
@@ -116,7 +149,7 @@ export function parseTagCsv( filePath: string ): ParsedRecord[] {
         for ( const [ key, value ] of Object.entries( record ) ) {
             if ( key.startsWith( 'Tag: ' ) ) {
                 const tagKey = key.substring( 'Tag: '.length )
-                if ( value !== '(not tagged)' ) {
+                if ( value !== '(not tagged)' && value !== '' ) {
                     tags[ tagKey ] = value
                 }
             }

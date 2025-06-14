@@ -1,16 +1,15 @@
 import { EC2Client, Instance, Tag, Volume } from '@aws-sdk/client-ec2'
-import { DRY_RUN_VOLUMES, OVERWRITE_TAGS_ON_VOLUME_FROM_INSTANCE } from './main'
+import { OVERWRITE_TAGS_ON_VOLUME_FROM_INSTANCE } from './main'
 import { applyTagsToResources } from './tagUtils'
 
 
-export async function applyInstanceTagsToVolumes( ec2Client: EC2Client, instance: Instance, volumes: Map<string, Volume> ) {
+export async function applyInstanceTagsToVolumes( ec2Client: EC2Client, instance: Instance, volumes: Map<string, Volume>, isDryRun: boolean ) {
     if ( !instance.Tags ) {
         console.log( `Instance '${instance.InstanceId}' has no tags, skipping` )
         return
     }
 
     for ( const mapping of instance.BlockDeviceMappings || [] ) {
-        // console.log( `Checking mapping: ${JSON.stringify( mapping )}` )
 
         const volumeId = mapping.Ebs!.VolumeId!
         const volume = volumes.get( volumeId )
@@ -57,7 +56,7 @@ export async function applyInstanceTagsToVolumes( ec2Client: EC2Client, instance
             ec2Client,
             resourceIds: [ volumeId ],
             tags: tagsToApply,
-            isDryRun: DRY_RUN_VOLUMES,
+            isDryRun: isDryRun,
             resourceType: 'volume',
             resourceName: volumeId
         } )
