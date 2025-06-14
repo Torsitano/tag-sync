@@ -13,7 +13,7 @@ interface ParsedRecord {
     ARN: string
 }
 
-
+// Applies default tags from SSM to the instances
 export async function applyDefaultTagsToInstances( ec2Client: EC2Client, instances: Instance[], defaultTags: Map<string, string> ) {
     for ( const instance of instances ) {
 
@@ -79,6 +79,7 @@ export function backupInstanceTags( instances: Instance[] ) {
     console.log( `Instance tags backup saved to ${backupFileName}` )
 }
 
+// Applies tags from a CSV file to the instances in the CSV file
 export async function applyTagsFromCsv( ec2Client: EC2Client, csvFilePath: string ) {
     const parsedRecords = parseTagCsv( csvFilePath )
 
@@ -100,8 +101,8 @@ export async function applyTagsFromCsv( ec2Client: EC2Client, csvFilePath: strin
     }
 }
 
-
-function parseTagCsv( filePath: string ): ParsedRecord[] {
+// Parses a CSV file and returns an array of ParsedRecord objects
+export function parseTagCsv( filePath: string ): ParsedRecord[] {
     const fileContent = fs.readFileSync( filePath, 'utf8' )
 
     const records = parse( fileContent, {
@@ -131,3 +132,4 @@ function parseTagCsv( filePath: string ): ParsedRecord[] {
         }
     } )
 }
+

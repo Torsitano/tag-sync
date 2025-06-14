@@ -1,18 +1,15 @@
 import { EC2Client, Tag } from '@aws-sdk/client-ec2'
 import { applyTagsToResources } from './tagUtils'
 import * as fs from 'fs'
+import { DRY_RUN_INSTANCES } from './main'
 
-// You must change the name of the backup file in the constant RESTORE_BACKUP_FILE to the one you want to restore
-export const RESTORE_BACKUP_FILE = 'instance-tags-backup-2025-06-14T13:23:35.031Z.json'
-export const DRY_RUN = false
+export async function restoreInstanceTagsFromBackup( ec2Client: EC2Client, backupFileName: string ) {
 
-export async function restoreInstanceTagsFromBackup( ec2Client: EC2Client ) {
-    if ( !fs.existsSync( RESTORE_BACKUP_FILE ) ) {
-        console.error( `Backup file ${RESTORE_BACKUP_FILE} does not exist` )
+    if ( !fs.existsSync( backupFileName ) ) {
+        console.error( `Backup file ${backupFileName} does not exist` )
         return
     }
-
-    const backupFileContent = fs.readFileSync( RESTORE_BACKUP_FILE, 'utf-8' )
+    const backupFileContent = fs.readFileSync( backupFileName, 'utf-8' )
     const instanceTagsBackup: Record<string, Record<string, string>> = JSON.parse( backupFileContent )
 
     for ( const instanceId in instanceTagsBackup ) {
@@ -26,13 +23,9 @@ export async function restoreInstanceTagsFromBackup( ec2Client: EC2Client ) {
             ec2Client,
             resourceIds: [ instanceId ],
             tags: tags,
-            isDryRun: DRY_RUN,
+            isDryRun: DRY_RUN_INSTANCES,
             resourceType: 'instance',
             resourceName: instanceId
         } )
     }
 }
-
-restoreInstanceTagsFromBackup( new EC2Client( { region: 'us-east-1' } ) ).then( () => {
-    console.log( 'Backup restoration completed' )
-} )
