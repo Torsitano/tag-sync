@@ -1,5 +1,6 @@
-import { CreateTagsCommand, EC2Client, Instance, Tag, Volume } from '@aws-sdk/client-ec2'
+import { EC2Client, Instance, Tag, Volume } from '@aws-sdk/client-ec2'
 import { DRY_RUN_VOLUMES, OVERWRITE_TAGS_ON_VOLUME_FROM_INSTANCE } from './main'
+import { applyTagsToResources } from './tagUtils'
 
 
 export async function applyInstanceTagsToVolumes( ec2Client: EC2Client, instance: Instance, volumes: Map<string, Volume> ) {
@@ -52,25 +53,13 @@ export async function applyInstanceTagsToVolumes( ec2Client: EC2Client, instance
 
         }
 
-        if ( tagsToApply.length > 0 ) {
-
-            console.log( `Applying tags to volume '${volumeId}' from instance '${instance.InstanceId}'` )
-
-            if ( DRY_RUN_VOLUMES ) {
-                console.log( `DRY RUN: Would apply tags to Volume '${volumeId}:` )
-                console.dir( tagsToApply )
-                continue
-            }
-
-            const command = new CreateTagsCommand( {
-                Resources: [ volumeId ],
-                Tags: tagsToApply,
-            } )
-
-            await ec2Client.send( command )
-            console.log( `Tags applied to volume '${volumeId}'` )
-        } else {
-            console.log( `No tags to apply to volume '${volumeId}' from instance '${instance.InstanceId}'` )
-        }
+        await applyTagsToResources( {
+            ec2Client,
+            resourceIds: [ volumeId ],
+            tags: tagsToApply,
+            isDryRun: DRY_RUN_VOLUMES,
+            resourceType: 'volume',
+            resourceName: volumeId
+        } )
     }
 }

@@ -1,5 +1,6 @@
-import { CreateTagsCommand, EC2Client, Instance, Tag } from '@aws-sdk/client-ec2'
+import { EC2Client, Instance, Tag } from '@aws-sdk/client-ec2'
 import { DRY_RUN_INSTANCES, OVERWRITE_TAGS_ON_INSTANCE_FROM_DEFAULT } from './main'
+import { applyTagsToResources } from './tagUtils'
 import * as fs from 'fs'
 import { parse } from 'csv-parse/sync'
 
@@ -44,26 +45,14 @@ export async function applyDefaultTagsToInstances( ec2Client: EC2Client, instanc
         }
 
 
-        if ( tagsToApply.length > 0 ) {
-
-            console.log( `Applying default tags to instance '${instance.InstanceId}'` )
-
-            if ( DRY_RUN_INSTANCES ) {
-                console.log( `DRY RUN: Would apply tags to Instance '${instance.InstanceId}:` )
-                console.dir( tagsToApply )
-                continue
-            }
-
-            const command = new CreateTagsCommand( {
-                Resources: [ instance.InstanceId! ],
-                Tags: tagsToApply,
-            } )
-
-            await ec2Client.send( command )
-            console.log( `Default tags applied to instance '${instance.InstanceId}'` )
-        } else {
-            console.log( `No default tags to apply to instance '${instance.InstanceId}'` )
-        }
+        await applyTagsToResources( {
+            ec2Client,
+            resourceIds: [ instance.InstanceId! ],
+            tags: tagsToApply,
+            isDryRun: DRY_RUN_INSTANCES,
+            resourceType: 'instance',
+            resourceName: instance.InstanceId!
+        } )
     }
 }
 
@@ -90,7 +79,7 @@ export function backupInstanceTags( instances: Instance[] ) {
     console.log( `Instance tags backup saved to ${backupFileName}` )
 }
 
-export function applyTagsFromCsv( ec2Client: EC2Client, csvFilePath: string ) {
+export async function applyTagsFromCsv( ec2Client: EC2Client, csvFilePath: string ) {
     const parsedRecords = parseTagCsv( csvFilePath )
 
     for ( const record of parsedRecords ) {
@@ -100,21 +89,14 @@ export function applyTagsFromCsv( ec2Client: EC2Client, csvFilePath: string ) {
             tags.push( { Key: key, Value: value } )
         }
 
-        console.log( `Applying tags to instance '${record.Identifier}'` )
-
-        if ( DRY_RUN_INSTANCES ) {
-            console.log( `DRY RUN: Would apply tags to Instance '${record.Identifier}:` )
-            console.dir( tags )
-            continue
-        }
-
-        const command = new CreateTagsCommand( {
-            Resources: [ record.Identifier ],
-            Tags: tags,
+        await applyTagsToResources( {
+            ec2Client,
+            resourceIds: [ record.Identifier ],
+            tags: tags,
+            isDryRun: DRY_RUN_INSTANCES,
+            resourceType: 'instance',
+            resourceName: record.Identifier
         } )
-
-        ec2Client.send( command )
-        console.log( `Tags applied to instance '${record.Identifier}'` )
     }
 }
 

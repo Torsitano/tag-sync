@@ -5,7 +5,7 @@ import { applyInstanceTagsToVolumes } from './volumes'
 
 export const PARAMETER_NAME = '/tag-sync/tags'
 export const OVERWRITE_TAGS_ON_VOLUME_FROM_INSTANCE = true
-export const OVERWRITE_TAGS_ON_INSTANCE_FROM_DEFAULT = true
+export const OVERWRITE_TAGS_ON_INSTANCE_FROM_DEFAULT = false
 export const APPLY_DEFAULT_TAGS_TO_INSTANCES = true
 export const DRY_RUN_INSTANCES = true
 export const DRY_RUN_VOLUMES = true

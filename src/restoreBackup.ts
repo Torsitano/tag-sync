@@ -1,11 +1,12 @@
-import { CreateTagsCommand, EC2Client, Tag } from '@aws-sdk/client-ec2'
+import { EC2Client, Tag } from '@aws-sdk/client-ec2'
+import { applyTagsToResources } from './tagUtils'
 import * as fs from 'fs'
 
 // You must change the name of the backup file in the constant RESTORE_BACKUP_FILE to the one you want to restore
 export const RESTORE_BACKUP_FILE = 'instance-tags-backup-2025-06-14T13:23:35.031Z.json'
 export const DRY_RUN = false
 
-export function restoreInstanceTagsFromBackup( ec2Client: EC2Client ) {
+export async function restoreInstanceTagsFromBackup( ec2Client: EC2Client ) {
     if ( !fs.existsSync( RESTORE_BACKUP_FILE ) ) {
         console.error( `Backup file ${RESTORE_BACKUP_FILE} does not exist` )
         return
@@ -20,17 +21,18 @@ export function restoreInstanceTagsFromBackup( ec2Client: EC2Client ) {
 
         console.log( `Restoring tags for instance '${instanceId}'` )
         console.dir( tags )
-        if ( DRY_RUN ) {
-            console.log( `DRY RUN: Would restore tags for Instance '${instanceId}:` )
-            continue
-        }
-        const command = new CreateTagsCommand( {
-            Resources: [ instanceId ],
-            Tags: tags,
+
+        await applyTagsToResources( {
+            ec2Client,
+            resourceIds: [ instanceId ],
+            tags: tags,
+            isDryRun: DRY_RUN,
+            resourceType: 'instance',
+            resourceName: instanceId
         } )
-        ec2Client.send( command )
-        console.log( `Tags restored for instance '${instanceId}'` )
     }
 }
 
-restoreInstanceTagsFromBackup( new EC2Client( { region: 'us-east-1' } ) )
+restoreInstanceTagsFromBackup( new EC2Client( { region: 'us-east-1' } ) ).then( () => {
+    console.log( 'Backup restoration completed' )
+} )
