@@ -61,7 +61,10 @@ export function backupInstanceTags( instances: Instance[] ) {
         instanceTagsBackup[ instance.InstanceId! ] = tagsObj
     }
 
-    const backupFileName = `instance-tags-backup-${new Date().toISOString()}.json`
+    // Use a Windows-safe filename
+    const now = new Date()
+    const safeTimestamp = now.toISOString().replace( /[:.]/g, '-' )
+    const backupFileName = `instance-tags-backup-${safeTimestamp}.json`
     const backupFileContent = JSON.stringify( instanceTagsBackup, null, 2 )
 
     fs.writeFileSync( backupFileName, backupFileContent )
